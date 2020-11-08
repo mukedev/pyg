@@ -33,33 +33,33 @@ object App {
     }
 
     // 添加水印
-    val watermarkDataStream: DataStream[Canal] = canalDataStream.assignTimestampsAndWatermarks(new AssignerWithPeriodicWatermarks[Canal] {
-
-      var currentTimeStamp = 0l
-      val maxDelayTime = 2000
-
-      override def getCurrentWatermark: Watermark = {
-        new Watermark(currentTimeStamp - maxDelayTime)
-      }
-
-      override def extractTimestamp(t: Canal, l: Long): Long = {
-        currentTimeStamp = Math.max(t.timestamp, l)
-        currentTimeStamp
-      }
-    })
-
-    val hBaseDataStream: DataStream[HBaseOperation] = PreprocessTask.process(watermarkDataStream)
-
-    hBaseDataStream.addSink(new SinkFunction[HBaseOperation] {
-      override def invoke(value: HBaseOperation, context: SinkFunction.Context[_]): Unit = {
-        value.opType match {
-          case "DELETE" =>
-            HBaseUtil.deleteData(value.tableName, value.rowkey, value.cfName)
-          case _ =>
-            HBaseUtil.putData(value.tableName, value.rowkey, value.cfName, value.colName, value.colValue)
-        }
-      }
-    })
+//    val watermarkDataStream: DataStream[Canal] = canalDataStream.assignTimestampsAndWatermarks(new AssignerWithPeriodicWatermarks[Canal] {
+//
+//      var currentTimeStamp = 0l
+//      val maxDelayTime = 2000
+//
+//      override def getCurrentWatermark: Watermark = {
+//        new Watermark(currentTimeStamp - maxDelayTime)
+//      }
+//
+//      override def extractTimestamp(t: Canal, l: Long): Long = {
+//        currentTimeStamp = Math.max(t.timestamp, l)
+//        currentTimeStamp
+//      }
+//    })
+//
+//    val hBaseDataStream: DataStream[HBaseOperation] = PreprocessTask.process(watermarkDataStream)
+//
+//    hBaseDataStream.addSink(new SinkFunction[HBaseOperation] {
+//      override def invoke(value: HBaseOperation, context: SinkFunction.Context[_]): Unit = {
+//        value.opType match {
+//          case "DELETE" =>
+//            HBaseUtil.deleteData(value.tableName, value.rowkey, value.cfName)
+//          case _ =>
+//            HBaseUtil.putData(value.tableName, value.rowkey, value.cfName, value.colName, value.colValue)
+//        }
+//      }
+//    })
 
     env.execute(this.getClass.getName)
   }
