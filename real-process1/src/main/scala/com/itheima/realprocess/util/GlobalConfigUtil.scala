@@ -14,6 +14,9 @@ object GlobalConfigUtil {
   val enableAutoCommit = config.getString("enable.auto.commit")
   val autoCommitIntervalMs = config.getString("auto.commit.interval.ms")
   val autoOffsetReset = config.getString("auto.offset.reset")
+  val adGroupId = config.getString("ad.group.id")
+  val adInputTopic = config.getString("ad.input.topic")
+  val adProcessedTopic = config.getString("ad.processed.topic")
 
 
   def main(args: Array[String]): Unit = {
@@ -24,5 +27,7 @@ object GlobalConfigUtil {
     println(enableAutoCommit)
     println(autoCommitIntervalMs)
     println(autoOffsetReset)
+    println(adGroupId)
+    println(adInputTopic)
   }
 }

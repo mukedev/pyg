@@ -1,6 +1,6 @@
 package com.itheima.realprocess.task
 
-import com.itheima.realprocess.bean.{ClickLogWide, Message}
+import com.itheima.realprocess.bean.{AdClickLog, AdClickLogWide, ClickLogWide, Message}
 import com.itheima.realprocess.util.HBaseUtil
 import org.apache.commons.lang.StringUtils
 import org.apache.commons.lang.time.FastDateFormat
@@ -11,6 +11,49 @@ import org.apache.flink.streaming.api.scala.DataStream
   * 预处理任务
   */
 object PreprocessTask {
+
+  def analysisIsNew(adLog: AdClickLog) = {
+    var isNew = 0
+    // 需要查询HBase的表判断是否是新用户
+    val rowkey = adLog.user_id
+    val tableName = "user_history"
+    val cfName = "info"
+    val userIdColName = "user_id"
+    val userId = HBaseUtil.getData(tableName, rowkey, cfName, userIdColName)
+
+    if (StringUtils.isBlank(userId)) {
+      isNew = 1
+    }
+    isNew
+  }
+
+  def adProcess(watermarkDataStream: DataStream[AdClickLog]) = {
+    var clickCnt = 0
+    watermarkDataStream.map {
+      adLog =>
+        // 增加is_new,click_cnt
+        val isNew = analysisIsNew(adLog)
+        if (StringUtils.isNotBlank(adLog.click_user_id)) {
+          clickCnt = 1
+        }
+        // 构建拓宽样例类AdClickLogWide
+        new AdClickLogWide(
+          adLog.city,
+          adLog.ad_campaigns,
+          adLog.ad_media,
+          adLog.ad_source,
+          adLog.corpurin,
+          adLog.device_type,
+          adLog.host,
+          adLog.t_id,
+          adLog.user_id,
+          adLog.click_user_id,
+          adLog.timestamp,
+          isNew,
+          clickCnt
+        )
+    }
+  }
 
   def process(watermarkDataStream: DataStream[Message]) = {
 
@@ -53,7 +96,7 @@ object PreprocessTask {
     }
   }
 
-  def isNewProcess(msg:Message) = {
+  def isNewProcess(msg: Message) = {
     // 定义四个变量，初始化为0
     var isNew = 0
     var isHourNew = 0
@@ -70,52 +113,53 @@ object PreprocessTask {
 
     var lastVisitedTimeColumn = "lastVisitedTime"
 
-    val userId: String = HBaseUtil.getData(tableName, rowkey, colFamily,userIdColumn)
-    val channelId: String = HBaseUtil.getData(tableName, rowkey, colFamily,channelIdColumn)
-    val lastVisitedTime: String = HBaseUtil.getData(tableName, rowkey, colFamily,lastVisitedTimeColumn)
+    val userId: String = HBaseUtil.getData(tableName, rowkey, colFamily, userIdColumn)
+    val channelId: String = HBaseUtil.getData(tableName, rowkey, colFamily, channelIdColumn)
+    val lastVisitedTime: String = HBaseUtil.getData(tableName, rowkey, colFamily, lastVisitedTimeColumn)
 
 
     // 如果userid为空，则该用户是新用户
-    if (StringUtils.isBlank(userId)){
+    if (StringUtils.isBlank(userId)) {
       isNew = 1
       isHourNew = 1
       isDayNew = 1
       isMonthNew = 1
 
       // 保存用户的访问记录到"user_history"
-      HBaseUtil.putMapData(tableName, rowkey, colFamily,Map(
-          userIdColumn -> msg.clickLog.userID,
-          channelIdColumn -> msg.clickLog.channelID,
-          lastVisitedTimeColumn -> msg.timestamp
+      HBaseUtil.putMapData(tableName, rowkey, colFamily, Map(
+        userIdColumn -> msg.clickLog.userID,
+        channelIdColumn -> msg.clickLog.channelID,
+        lastVisitedTimeColumn -> msg.timestamp
       ))
     } else {
       isNew = 0
       //其它字段需要进行时间戳比对
-      isHourNew = compareDate(msg.timestamp,lastVisitedTime.toLong,"yyyyMMddHH")
-      isDayNew = compareDate(msg.timestamp,lastVisitedTime.toLong,"yyyyMMdd")
-      isMonthNew = compareDate(msg.timestamp,lastVisitedTime.toLong,"yyyyMM")
+      isHourNew = compareDate(msg.timestamp, lastVisitedTime.toLong, "yyyyMMddHH")
+      isDayNew = compareDate(msg.timestamp, lastVisitedTime.toLong, "yyyyMMdd")
+      isMonthNew = compareDate(msg.timestamp, lastVisitedTime.toLong, "yyyyMM")
 
       //更新"user_history"的用户时间戳
-      HBaseUtil.putData(tableName,rowkey,colFamily,lastVisitedTimeColumn,msg.timestamp.toString)
+      HBaseUtil.putData(tableName, rowkey, colFamily, lastVisitedTimeColumn, msg.timestamp.toString)
     }
 
-    (isNew,isHourNew,isDayNew,isMonthNew)
+    (isNew, isHourNew, isDayNew, isMonthNew)
   }
 
 
   /**
     * 对比时间戳
+    *
     * @param currentTime
     * @param historyTime
     * @param format
     */
-  def compareDate(currentTime:Long, historyTime:Long, format:String): Int ={
+  def compareDate(currentTime: Long, historyTime: Long, format: String): Int = {
     val currentTimeStr = timestampToStr(currentTime, format)
     val historyTimeStr = timestampToStr(historyTime, format)
 
     // 比对字符串的大小，如果当前时间> 历史时间返回1
     var result: Int = currentTimeStr.compareTo(historyTimeStr)
-    if (result > 0){
+    if (result > 0) {
       result = 1
     } else {
       result = 0
@@ -125,11 +169,12 @@ object PreprocessTask {
 
   /**
     * 转换日期
+    *
     * @param timestamp
     * @param format
     * @return
     */
-  def timestampToStr(timestamp:Long, format:String): String ={
+  def timestampToStr(timestamp: Long, format: String): String = {
     FastDateFormat.getInstance(format).format(timestamp)
   }
 
